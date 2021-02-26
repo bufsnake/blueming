@@ -2,6 +2,7 @@ package http_request
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"github.com/bufsnake/blueming/pkg/useragent"
 	"io"
@@ -43,7 +44,7 @@ func HTTPRequest(url string, timeout int) (status int, size string, err error) {
 		return 0, "0B", err
 	}
 	if !strings.Contains(do.Header.Get("Content-Type"), "application/octet-stream") {
-		return 0, "0B", err
+		return 0, "0B", errors.New(do.Header.Get("Content-Type")+" "+url)
 	}
 	temp := float64(do.ContentLength)
 	SIZE := []string{"B", "K", "M", "G", "T"}

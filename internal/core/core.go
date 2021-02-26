@@ -9,7 +9,7 @@ import (
 	"sync"
 )
 
-func NewCore(url []string, thread, timeout int) {
+func NewCore(url []string, thread, timeout int, proxy string) {
 	requestlist := make([][]string, 0)
 	for i := 0; i < len(url); i++ {
 		genURL, err := general_file_name.NewGenURL(url[i])
@@ -30,7 +30,7 @@ func NewCore(url []string, thread, timeout int) {
 	down := sync.WaitGroup{}
 	for i := 0; i < thread; i++ {
 		down.Add(1)
-		go httpdownload(&down, httpd)
+		go httpdownload(&down, httpd, proxy)
 	}
 	i := 0
 	for {
@@ -63,6 +63,9 @@ func httprequest(wait *sync.WaitGroup, httpc, httpd chan string, timeout int) {
 			log.Warn(err)
 			continue
 		}
+		if status == 200 && (size == "0B" || size == "0.0B") {
+			log.Debug(status, size, url)
+		}
 		if size != "0B" && size != "0.0B" && status == 200 {
 			log.Info(size, url)
 			httpd <- url
@@ -70,10 +73,10 @@ func httprequest(wait *sync.WaitGroup, httpc, httpd chan string, timeout int) {
 	}
 }
 
-func httpdownload(wait *sync.WaitGroup, httpd chan string) {
+func httpdownload(wait *sync.WaitGroup, httpd chan string, proxy string) {
 	defer wait.Done()
 	for url := range httpd {
-		err := file_download.DownloadFile(url)
+		err := file_download.DownloadFile(url, proxy)
 		if err != nil {
 			log.Info("file download error", err)
 			// 将URL保存到文件

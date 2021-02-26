@@ -5,23 +5,34 @@ import (
 	"github.com/bufsnake/blueming/pkg/useragent"
 	"io"
 	"net/http"
+	url2 "net/url"
 	"os"
 	"strings"
 	"time"
 )
 
-func DownloadFile(url string) error {
+func DownloadFile(url string, proxyx string) error {
 	client := &http.Client{
 		Timeout: 1 * time.Hour,
-		Transport: &http.Transport{
-			DisableKeepAlives: true,
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-			},
-		},
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
+	}
+	transport := &http.Transport{
+		DisableKeepAlives: true,
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
+	if proxyx != "" {
+		proxy, err := url2.Parse(proxyx)
+		if err != nil {
+			return err
+		}
+		transport.Proxy = http.ProxyURL(proxy)
+		client.Transport = transport
+	} else {
+		client.Transport = transport
 	}
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
