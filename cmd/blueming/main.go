@@ -19,6 +19,7 @@ func main() {
 	url := flag.String("u", "", "set blueming url")
 	urlfile := flag.String("f", "", "set blueming url file")
 	loglevel := flag.String("l", log.DEBUG, "set blueming log level(trace debug info warn fatal)")
+	proxy := flag.String("p", "", "set blueming download proxy")
 	flag.Parse()
 	log.SetLevel(*loglevel)
 	urls := []string{}
@@ -47,5 +48,5 @@ func main() {
 	if err != nil {
 		log.Warn(err)
 	}
-	core.NewCore(urls, *thread, *timeout)
+	core.NewCore(urls, *thread, *timeout, *proxy)
 }
