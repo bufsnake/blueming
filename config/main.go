@@ -7,6 +7,7 @@ type Config struct {
 	Urlfile       string
 	Loglevel      string
 	Wordlist      string
+	Index         string
 	Proxy         string
 	ExcludeStatus string
 }
