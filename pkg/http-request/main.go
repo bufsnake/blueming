@@ -2,17 +2,16 @@ package http_request
 
 import (
 	"crypto/tls"
-	"errors"
 	"fmt"
+	"github.com/bufsnake/blueming/pkg/log"
 	"github.com/bufsnake/blueming/pkg/useragent"
 	"io"
 	"io/ioutil"
 	"net/http"
-	"strings"
 	"time"
 )
 
-func HTTPRequest(url string, timeout int) (status int, size string, err error) {
+func HTTPRequest(url string, timeout int) (status int, contenttype, size string, err error) {
 	client := &http.Client{
 		Timeout: time.Duration(timeout) * time.Second,
 		Transport: &http.Transport{
@@ -27,7 +26,7 @@ func HTTPRequest(url string, timeout int) (status int, size string, err error) {
 	}
 	req, err := http.NewRequest(http.MethodHead, url, nil)
 	if err != nil {
-		return 0, "0B", err
+		return 0, "", "0B", err
 	}
 	req.Header.Add("Accept", "*/*")
 	req.Header.Add("Referer", "http://www.baidu.com")
@@ -36,15 +35,12 @@ func HTTPRequest(url string, timeout int) (status int, size string, err error) {
 	req.Header.Add("User-Agent", useragent.RandomUserAgent())
 	do, err := client.Do(req)
 	if err != nil {
-		return 0, "0B", err
+		return 0, "", "0B", err
 	}
 	defer do.Body.Close()
 	_, err = io.Copy(ioutil.Discard, do.Body)
 	if err != nil {
-		return 0, "0B", err
-	}
-	if !strings.Contains(do.Header.Get("Content-Type"), "application/octet-stream") {
-		return 0, "0B", errors.New(do.Header.Get("Content-Type")+" "+url)
+		return 0, "", "0B", err
 	}
 	temp := float64(do.ContentLength)
 	SIZE := []string{"B", "K", "M", "G", "T"}
@@ -58,9 +54,16 @@ func HTTPRequest(url string, timeout int) (status int, size string, err error) {
 	}
 	length := ""
 	if i > len(SIZE) {
-		length = fmt.Sprintf("%0.2fX", temp)
+		length = fmt.Sprintf("%0.1fX", temp)
 	} else {
 		length = fmt.Sprintf("%0.1f%s", temp, SIZE[i])
 	}
-	return do.StatusCode, length, nil
+	if do.ContentLength > 104857600 {
+		err := ioutil.WriteFile("output/download_error", []byte(do.Header.Get("Content-Type")+" "+length+" "+url+"\n"), 644)
+		if err != nil {
+			log.Warn(err)
+		}
+		return 0, "", "0B", err
+	}
+	return do.StatusCode, do.Header.Get("Content-Type"), length, nil
 }
