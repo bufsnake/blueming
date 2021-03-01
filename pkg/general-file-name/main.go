@@ -7,16 +7,22 @@ import (
 )
 
 type general_file_name struct {
-	url string
+	url      string
+	wordlist string
 }
 
-func NewGenURL(url string) (*general_file_name, error) {
-	return &general_file_name{url: strings.TrimRight(url, "/")}, nil
+func NewGenURL(url string, wordlist string) (*general_file_name, error) {
+	return &general_file_name{url: strings.TrimRight(url, "/"), wordlist: wordlist}, nil
 }
 
 func (g *general_file_name) GetURL() *[]string {
 	ret := make([]string, 0)
-	prefix := []string{"www", "admin", "wwwroot", "web", "data", "backup", "db", "database", "code", "test", "user", "sql"}
+	if len(g.wordlist) != 0 {
+		ret = append(ret, g.url+"/"+strings.TrimLeft(g.wordlist, "/"))
+		return &ret
+	}
+
+	prefix := []string{"data", "backup", "db", "database", "code", "test", "user", "sql", "www", "admin", "wwwroot", "web"}
 	suffix := []string{".zip", ".rar", ".tar.gz", ".tgz", ".tar.bz2", ".tar", ".jar", ".war", ".7z", ".bak", ".sql"}
 	parse, err := url.Parse(g.url)
 	if err == nil {
