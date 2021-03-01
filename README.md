@@ -18,16 +18,24 @@ go build -v
 ```bash
 └> ./blueming
 Usage of ./blueming:
+  -es string
+    	dirscan filter status(200,206,301,302,401,403,404,405,500,501,502,503,504,600,etc.) (default "404")
   -f string
-    	set blueming url file
+    	set url file
+  -i string
+    	set wordlist index(ex: test.php)
   -l string
-    	set blueming log level(trace debug info warn fatal) (default "debug")
+    	set log level(trace,debug,info,warn,fatal) (default "debug")
+  -p string
+    	set download proxy
   -s int
-    	set blueming timeout (default 10)
+    	set timeout (default 10)
   -t int
-    	set blueming thread (default 10)
+    	set thread (default 10)
   -u string
-    	set blueming url
+    	set url
+  -w string
+    	set wordlist
 ```
 
 ## TODO

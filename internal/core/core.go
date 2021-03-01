@@ -41,12 +41,24 @@ func NewCore(url []string, config config.Config) core {
 			log.Fatal(err)
 		}
 		split := strings.Split(string(file), "\n")
+		flag := false
+		if config.Index == "" {
+			flag = true
+		}
 		for i := 0; i < len(split); i++ {
 			split[i] = strings.Trim(split[i], "\r")
 			if split[i] == "" || split[i] == "/" {
 				continue
 			}
-			wordlist = append(wordlist, split[i])
+			if flag {
+				wordlist = append(wordlist, split[i])
+			}
+			if split[i] == config.Index {
+				flag = true
+			}
+		}
+		if len(wordlist) == 0 {
+			log.Fatal("specify index not found")
 		}
 	}
 	return core{url: url, config: config, excludestatus: statuss, wordlist: wordlist}
@@ -60,7 +72,13 @@ again:
 	}
 	requestlist := make([][]string, 0)
 	for i := 0; i < len(c.url); i++ {
-		genURL, err := general_file_name.NewGenURL(c.url[i], c.wordlist[index])
+		uri := ""
+		if len(c.wordlist) == 0 {
+			uri = ""
+		} else {
+			uri = c.wordlist[index]
+		}
+		genURL, err := general_file_name.NewGenURL(c.url[i], uri)
 		if err != nil {
 			log.Warn(err)
 			continue

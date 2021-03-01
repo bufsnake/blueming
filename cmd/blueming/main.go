@@ -18,6 +18,7 @@ func main() {
 	flag.StringVar(&conf.Urlfile, "f", "", "set url file")
 	flag.StringVar(&conf.Loglevel, "l", log.DEBUG, "set log level(trace,debug,info,warn,fatal)")
 	flag.StringVar(&conf.Wordlist, "w", "", "set wordlist")
+	flag.StringVar(&conf.Index, "i", "", "set wordlist index(ex: test.php)")
 	flag.StringVar(&conf.Proxy, "p", "", "set download proxy")
 	flag.StringVar(&conf.ExcludeStatus, "es", "404", "dirscan filter status(200,206,301,302,401,403,404,405,500,501,502,503,504,600,etc.)")
 	flag.Parse()
