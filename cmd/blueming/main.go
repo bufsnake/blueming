@@ -20,7 +20,7 @@ func main() {
 	flag.StringVar(&conf.Wordlist, "w", "", "set wordlist")
 	flag.StringVar(&conf.Index, "i", "", "set wordlist index(ex: test.php)")
 	flag.StringVar(&conf.Proxy, "p", "", "set download proxy")
-	flag.StringVar(&conf.ExcludeStatus, "es", "404", "dirscan filter status(200,206,301,302,401,403,404,405,500,501,502,503,504,600,etc.)")
+	flag.StringVar(&conf.ExcludeStatus, "es", "404", "dirscan filter status(200,206,301,302,400,401,403,404,405,406,500,501,502,503,504,600,etc.)")
 	flag.Parse()
 	log.SetLevel(conf.Loglevel)
 	urls := []string{}
