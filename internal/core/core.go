@@ -122,6 +122,9 @@ again:
 	close(httpd)
 	down.Wait()
 
+	if c.config.Wordlist == "" {
+		return
+	}
 	index++
 	goto again
 }
@@ -144,20 +147,22 @@ func (c *core) httprequest(wait *sync.WaitGroup, httpc, httpd chan string, timeo
 			}
 			if flag && status != 0 {
 				pr := make([]interface{}, 0)
+				pr = append(pr, BrightWhite(url))
 				if status >= 200 && status < 300 {
-					pr = []interface{}{BrightGreen(status).String()}
+					pr = append(pr, BrightGreen(status).String())
 				} else if status >= 300 && status < 400 {
-					pr = []interface{}{BrightYellow(status).String()}
+					pr = append(pr, BrightYellow(status).String())
 				} else if status >= 400 && status < 500 {
-					pr = []interface{}{BrightMagenta(status).String()}
+					pr = append(pr, BrightMagenta(status).String())
 				} else {
-					pr = []interface{}{BrightWhite(status).String()}
+					pr = append(pr, BrightWhite(status).String())
 				}
-				pr = append(pr, BrightCyan(fmt.Sprintf("%8s", size)).String())
-				if ct != "" {
+				pr = append(pr, BrightCyan(size).String())
+				if ct == "" {
+					pr = append(pr, "null")
+				} else {
 					pr = append(pr, ct)
 				}
-				pr = append(pr, BrightWhite(url))
 				fmt.Println(pr...)
 			}
 			continue
