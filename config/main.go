@@ -10,4 +10,5 @@ type Config struct {
 	Index         string
 	Proxy         string
 	ExcludeStatus string
+	ResultFile    string
 }
