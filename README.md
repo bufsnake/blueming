@@ -19,7 +19,7 @@ go build -v
 └> ./blueming
 Usage of ./blueming:
   -es string
-    	dirscan filter status(200,206,301,302,307,400,401,402,403,404,405,406,424,500,501,502,503,504,600,etc.) (default "404")
+    	dirscan filter status(200,206,301,302,400,401,403,404,405,500,501,502,503,504,600,etc.) (default "404")
   -f string
     	set url file
   -i string
@@ -28,8 +28,6 @@ Usage of ./blueming:
     	set log level(trace,debug,info,warn,fatal) (default "debug")
   -p string
     	set download proxy
-  -rf string
-    	parse result file
   -s int
     	set timeout (default 10)
   -t int
