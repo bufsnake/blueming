@@ -29,7 +29,8 @@ func (g *general_file_name) GetURL() *[]string {
 		if strings.Contains(parse.Host, ":") {
 			parse.Host = strings.Split(parse.Host, ":")[0]
 		}
-		parse.Host = strings.TrimLeft(parse.Host, "www.")
+		parse.Host = strings.TrimLeft(parse.Host, "www")
+		parse.Host = strings.TrimLeft(parse.Host, ".")
 		prefix = append(prefix, parse.Host)
 		if isdomain(parse.Host) {
 			split := strings.Split(parse.Host, ".")

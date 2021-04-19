@@ -10,6 +10,7 @@ import (
 	. "github.com/logrusorgru/aurora"
 	"io/ioutil"
 	url2 "net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -221,7 +222,12 @@ func (c *core) httprequest(wait *sync.WaitGroup, httpc, httpd chan string, timeo
 		if status == 200 && (size == "0B" || size == "0.0B") {
 			log.Debug(status, size, ct, url)
 		}
-		if size != "0B" && size != "0.0B" && status == 200 {
+		matchString, err := regexp.MatchString("application/[-\\w.]+", ct)
+		if err != nil {
+			log.Warn(err)
+			continue
+		}
+		if size != "0B" && size != "0.0B" && status == 200 && matchString {
 			log.Info(size, ct, url)
 			httpd <- url
 		}
