@@ -3,6 +3,7 @@ package http_request
 import (
 	"crypto/tls"
 	"fmt"
+	"github.com/bufsnake/blueming/config"
 	"github.com/bufsnake/blueming/pkg/log"
 	"github.com/bufsnake/blueming/pkg/useragent"
 	"io"
@@ -59,7 +60,7 @@ func HTTPRequest(url string, timeout int) (status int, contenttype, size string,
 		length = fmt.Sprintf("%0.1f%s", temp, SIZE[i])
 	}
 	if do.ContentLength > 104857600 {
-		err := ioutil.WriteFile("output/download_error", []byte(do.Header.Get("Content-Type")+" "+length+" "+url+"\n"), 644)
+		err := ioutil.WriteFile(config.LogFileName, []byte(do.Header.Get("Content-Type")+" "+length+" "+url+"\n"), 644)
 		if err != nil {
 			log.Warn(err)
 		}

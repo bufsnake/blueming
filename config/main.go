@@ -12,3 +12,5 @@ type Config struct {
 	ExcludeStatus string
 	ResultFile    string
 }
+
+var LogFileName string

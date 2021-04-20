@@ -241,7 +241,7 @@ func (c *core) httpdownload(wait *sync.WaitGroup, httpd chan string) {
 		if err != nil {
 			log.Info("file download error", err)
 			// 将URL保存到文件
-			err := ioutil.WriteFile("output/download_error", []byte(url+"\n"), 644)
+			err := ioutil.WriteFile(config.LogFileName, []byte(url+"\n"), 644)
 			if err != nil {
 				log.Warn(err)
 			}
