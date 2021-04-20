@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 )
 
 func main() {
@@ -92,7 +93,8 @@ func main() {
 		return
 	}
 	log.Info(len(urls), "个URL,", conf.Thread, "线程,", conf.Timeout, "超时")
-	create, err := os.Create("output/download_error")
+	config.LogFileName = "Log-" + time.Now().Format("2006-01-02 15:04:05")
+	create, err := os.Create(config.LogFileName)
 	if err != nil {
 		log.Warn(err)
 	}
