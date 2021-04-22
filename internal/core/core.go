@@ -10,6 +10,7 @@ import (
 	. "github.com/logrusorgru/aurora"
 	"io/ioutil"
 	url2 "net/url"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -241,10 +242,18 @@ func (c *core) httpdownload(wait *sync.WaitGroup, httpd chan string) {
 		if err != nil {
 			log.Info("file download error", err)
 			// 将URL保存到文件
-			err := ioutil.WriteFile(config.LogFileName, []byte(url+"\n"), 644)
+			file, err := os.OpenFile(config.LogFileName, os.O_WRONLY|os.O_APPEND, 0644)
 			if err != nil {
 				log.Warn(err)
+				continue
 			}
+			_, err = file.WriteString(url + "\n")
+			if err != nil {
+				file.Close()
+				log.Warn(err)
+				continue
+			}
+			file.Close()
 		}
 	}
 }
