@@ -6,9 +6,11 @@
 ## 安装
 
 ```bash
+go env -w GO111MODULE=on
+
 go get github.com/bufsnake/blueming
 
-cd $GOPATH/src/github.com/bufsnake/blueming/cmd/blueming/
+cd $GOPATH/pkg/mod/github.com/bufsnake/blueming<TAB>键后进入/cmd/blueming
 
 go build -v
 ```
