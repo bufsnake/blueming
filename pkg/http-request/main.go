@@ -6,28 +6,43 @@ import (
 	"github.com/bufsnake/blueming/config"
 	"github.com/bufsnake/blueming/pkg/log"
 	"github.com/bufsnake/blueming/pkg/useragent"
-	"io"
 	"io/ioutil"
 	"net/http"
+	url2 "net/url"
+	"os"
 	"time"
 )
 
-func HTTPRequest(url string, timeout int) (status int, contenttype, size string, err error) {
+func HTTPRequest(method, url, proxyx string, timeout int) (status int, contenttype, size string, body string, err error) {
 	client := &http.Client{
-		Timeout: time.Duration(timeout) * time.Second,
-		Transport: &http.Transport{
-			DisableKeepAlives: true,
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-			},
-		},
+		Timeout:   time.Duration(timeout) * time.Second,
+		Transport: nil,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 	}
-	req, err := http.NewRequest(http.MethodHead, url, nil)
+	transport := &http.Transport{
+		DisableKeepAlives: true,
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
+	if proxyx != "" {
+		proxy, err := url2.Parse(proxyx)
+		if err != nil {
+			return 0, "", "", "", err
+		}
+		transport.Proxy = http.ProxyURL(proxy)
+		client.Transport = transport
+	} else {
+		client.Transport = transport
+	}
+	req, err := http.NewRequest(method, url, nil)
 	if err != nil {
-		return 0, "", "0B", err
+		return 0, "", "0B", "", err
+	}
+	if method == http.MethodGet {
+		req.Header.Add("Range", "bytes=0-8100")
 	}
 	req.Header.Add("Accept", "*/*")
 	req.Header.Add("Referer", "http://www.baidu.com")
@@ -36,12 +51,13 @@ func HTTPRequest(url string, timeout int) (status int, contenttype, size string,
 	req.Header.Add("User-Agent", useragent.RandomUserAgent())
 	do, err := client.Do(req)
 	if err != nil {
-		return 0, "", "0B", err
+		return 0, "", "0B", "", err
 	}
 	defer do.Body.Close()
-	_, err = io.Copy(ioutil.Discard, do.Body)
+	all, err := ioutil.ReadAll(do.Body)
+	flag := false
 	if err != nil {
-		return 0, "", "0B", err
+		flag = true
 	}
 	temp := float64(do.ContentLength)
 	SIZE := []string{"B", "K", "M", "G", "T"}
@@ -60,11 +76,20 @@ func HTTPRequest(url string, timeout int) (status int, contenttype, size string,
 		length = fmt.Sprintf("%0.1f%s", temp, SIZE[i])
 	}
 	if do.ContentLength > 104857600 {
-		err := ioutil.WriteFile(config.LogFileName, []byte(do.Header.Get("Content-Type")+" "+length+" "+url+"\n"), 644)
+		file, err := os.OpenFile(config.LogFileName, os.O_WRONLY|os.O_APPEND, 0644)
 		if err != nil {
 			log.Warn(err)
 		}
-		return 0, "", "0B", err
+		_, err = file.WriteString(do.Header.Get("Content-Type") + " " + length + " " + url + "\n")
+		if err != nil {
+			file.Close()
+			log.Warn(err)
+		}
+		file.Close()
+		return 0, "", "0B", "", err
 	}
-	return do.StatusCode, do.Header.Get("Content-Type"), length, nil
+	if flag { // GET 获取 body 失败时
+		return do.StatusCode, do.Header.Get("Content-Type"), length, "", nil
+	}
+	return do.StatusCode, do.Header.Get("Content-Type"), length, string(all), nil
 }
