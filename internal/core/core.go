@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"github.com/antlabs/strsim"
 	"github.com/bufsnake/blueming/config"
 	file_download "github.com/bufsnake/blueming/pkg/file-download"
 	general_file_name "github.com/bufsnake/blueming/pkg/general-file-name"
@@ -9,43 +10,29 @@ import (
 	"github.com/bufsnake/blueming/pkg/log"
 	. "github.com/logrusorgru/aurora"
 	"io/ioutil"
+	"net/http"
 	url2 "net/url"
 	"os"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 )
 
 type core struct {
-	config        config.Config
-	url           []string
-	excludestatus []int
-	wordlist      []string
-	first         map[string]string
-	lock          sync.Mutex
+	config         config.Config
+	url            []string
+	wordlist       []string
+	htmlsimilarity map[string][]string // 耗时又占内存
+	hslock         sync.Mutex
 }
 
 func NewCore(url []string, config config.Config) core {
-	statuss := make([]int, 0)
-	split := strings.Split(config.ExcludeStatus, ",")
-	for i := 0; i < len(split); i++ {
-		if len(split[i]) == 0 {
-			continue
-		}
-		status, err := strconv.Atoi(split[i])
-		if err != nil {
-			log.Fatal(split[i], err)
-		}
-		statuss = append(statuss, status)
-	}
 	wordlist := make([]string, 0)
 	if config.Wordlist != "" {
 		file, err := ioutil.ReadFile(config.Wordlist)
 		if err != nil {
 			log.Fatal(err)
 		}
-		wordlist = append(wordlist, "/admino.ini")
 		split := strings.Split(string(file), "\n")
 		flag := false
 		if config.Index == "" {
@@ -67,42 +54,46 @@ func NewCore(url []string, config config.Config) core {
 			log.Fatal("specify index not found")
 		}
 	}
-	return core{url: url, config: config, excludestatus: statuss, wordlist: wordlist}
+	hs := make(map[string][]string)
+	return core{htmlsimilarity: hs, url: url, config: config, wordlist: wordlist}
 }
 
+// 目录扫描 和 备份文件扫描 分开
 func (c *core) Core() {
-	c.first = make(map[string]string)
-	index := 0 //
-again:
-	if c.config.Wordlist != "" && len(c.wordlist) == index {
-		return
+	if c.config.Wordlist != "" { // 目录扫描
+		c.dirscan()
+	} else { // 备份文件扫描
+		c.backup()
 	}
-	requestlist := make([][]string, 0)
-min:
-	for i := 0; i < len(c.url); i++ {
-		uri := ""
-		if len(c.wordlist) != 0 {
-			uri = c.wordlist[index]
-		}
-		genURL, err := general_file_name.NewGenURL(c.url[i], uri)
-		if err != nil {
-			log.Warn(err)
-			continue
-		}
-		getURL := genURL.GetURL()
-		requestlist = append(requestlist, *getURL)
-	}
-	if len(c.url) < 10 && len(c.wordlist) != 0 && index < len(c.wordlist)-1 {
-		index++
-		goto min
-	}
-	if len(requestlist) == 0 {
-		index++
-		goto again
-	}
+}
+
+func (c *core) dirscan() {
 	httpr := sync.WaitGroup{}
 	httpc := make(chan string, c.config.Thread)
-	httpd := make(chan string, c.config.Thread)
+	for i := 0; i < c.config.Thread; i++ {
+		httpr.Add(1)
+		go c.httprequest(&httpr, httpc, nil, c.config.Timeout)
+	}
+	length := general_file_name.InitGeneral(c.wordlist)
+	for w := 0; w < length; w++ {
+		for i := 0; i < len(c.url); i++ {
+			genURL, err := general_file_name.NewGenURL(c.url[i])
+			if err != nil {
+				log.Warn(err)
+				continue
+			}
+			httpc <- genURL.GetDirURI(w)
+		}
+	}
+	close(httpc)
+	httpr.Wait()
+}
+
+func (c *core) backup() {
+	log.Info("start scan backup")
+	httpr := sync.WaitGroup{}
+	httpc := make(chan string, c.config.Thread)
+	httpd := make(chan config.HTTPStatus, c.config.Thread)
 	for i := 0; i < c.config.Thread; i++ {
 		httpr.Add(1)
 		go c.httprequest(&httpr, httpc, httpd, c.config.Timeout)
@@ -112,133 +103,151 @@ min:
 		down.Add(1)
 		go c.httpdownload(&down, httpd)
 	}
-	i := 0
-	for {
-		flag := 0
-		for j := 0; j < len(requestlist); j++ {
-			if i >= len(requestlist[j]) {
-				flag++
+	// 一阶段 扫描 固定死的URI
+	length := general_file_name.InitGeneral([]string{})
+	for index := 0; index < length; index++ {
+		for i := 0; i < len(c.url); i++ {
+			genURL, err := general_file_name.NewGenURL(c.url[i])
+			if err != nil {
+				log.Warn(err)
 				continue
 			}
-			httpc <- requestlist[j][i]
-		}
-		i++
-		if flag == len(requestlist) {
-			break
+			httpc <- genURL.GetBackupURI(index)
 		}
 	}
+
+	// 扫描生成的URI
+	index := 0
+	for {
+		flag := true
+		for i := 0; i < len(c.url); i++ {
+			genURL, err := general_file_name.NewGenURL(c.url[i])
+			if err != nil {
+				log.Warn(err)
+				continue
+			}
+			getURL := genURL.GetBackupExtURI()
+			if len(*getURL) <= index {
+				continue
+			}
+			flag = false
+			httpc <- (*getURL)[index]
+		}
+		if flag {
+			break
+		}
+		index++
+	}
+	// 分析内存占用
+	//memStat := new(runtime.MemStats)
+	//runtime.ReadMemStats(memStat)
+	//fmt.Println(len(to), memStat.Alloc)
 	close(httpc)
 	httpr.Wait()
 	close(httpd)
 	down.Wait()
-
-	if c.config.Wordlist == "" {
-		return
-	}
-	index++
-	goto again
 }
 
-func (c *core) httprequest(wait *sync.WaitGroup, httpc, httpd chan string, timeout int) {
+func (c *core) httprequest(wait *sync.WaitGroup, httpc chan string, httpd chan config.HTTPStatus, timeout int) {
 	defer wait.Done()
 	for url := range httpc {
-		parse, _ := url2.Parse(url)
-		log.Trace(url)
-		status, ct, size, err := http_request.HTTPRequest(url, timeout)
-		c.lock.Lock()
+		var (
+			status int
+			ct     string
+			size   string
+			body   string
+			err    error
+		)
+		if c.config.Wordlist == "" { // 备份文件扫描
+			status, ct, size, body, err = http_request.HTTPRequest(http.MethodHead, url, c.config.Proxy, timeout)
+		} else { // 目录扫描
+			status, ct, size, body, err = http_request.HTTPRequest(http.MethodGet, url, c.config.Proxy, timeout)
+		}
+		log.Trace(status, ct, size, body, err, url)
 		if err != nil && c.config.Wordlist == "" {
-			if parse.Path == "/admino.ini" {
-				c.first[parse.Scheme+parse.Host] = "err"
-			}
 			log.Warn(err)
-			c.lock.Unlock()
-			continue
 		}
-		if parse.Path == "/admino.ini" {
-			c.first[parse.Scheme+parse.Host] = size
+		if err != nil && strings.Contains(err.Error(), "proxyconnect tcp") {
+			log.Warn(err)
 		}
-		c.lock.Unlock()
-
 		if c.config.Wordlist != "" {
-			if size == "0.0B" || size == "-1.0B" {
+			if status == 404 || status == 0 {
 				continue
 			}
-			c.lock.Lock()
-			_, ok := c.first[parse.Scheme+parse.Host]
-			if ok {
-				if c.first[parse.Scheme+parse.Host] == size {
-					c.lock.Unlock()
-					log.Trace("rm", url)
-					continue
+			// 计算页面相似度 -- 耗时严重 - 默认使用head请求
+			// 与当前URL的所有历史记录进行匹配
+			// 相似值低于0.75则追加
+			parse, err := url2.Parse(url)
+			if err != nil {
+				log.Warn(err)
+				continue
+			}
+			c.hslock.Lock()
+			similarity := false
+			for i := 0; i < len(c.htmlsimilarity[parse.Host]); i++ {
+				// 2.516400257s
+				//compare := strsim.Compare(body, c.htmlsimilarity[parse.Host][i], strsim.DiceCoefficient(1))
+
+				// 2.916750287s
+				//compare := strsim.Compare(body, c.htmlsimilarity[parse.Host][i], strsim.Jaro())
+
+				// 1.839468012s
+				compare := strsim.Compare(body, c.htmlsimilarity[parse.Host][i], strsim.Hamming())
+				if compare >= 0.75 {
+					similarity = true
+					break
 				}
 			}
-			c.lock.Unlock()
-			flag := true
-			for i := 0; i < len(c.excludestatus); i++ {
-				if status == c.excludestatus[i] {
-					flag = false
+
+			if similarity { // 相似 退出
+				c.hslock.Unlock()
+				continue
+			}
+			c.htmlsimilarity[parse.Host] = append(c.htmlsimilarity[parse.Host], body)
+			c.hslock.Unlock()
+
+			pr := make([]interface{}, 0)
+			if status >= 200 && status < 300 {
+				pr = append(pr, "["+BrightGreen(status).String()+"]")
+			} else if status >= 300 && status < 400 {
+				pr = append(pr, "["+BrightYellow(status).String()+"]")
+			} else if status >= 400 && status < 500 {
+				pr = append(pr, "["+BrightMagenta(status).String()+"]")
+			} else {
+				pr = append(pr, "["+BrightWhite(status).String()+"]")
+			}
+			pr = append(pr, "["+BrightCyan(size).String()+"]")
+			pr = append(pr, "["+BrightWhite(url).String()+"]")
+			if ct == "" {
+				pr = append(pr, "["+"null"+"]")
+			} else {
+				pr = append(pr, "["+ct+"]")
+			}
+			fmt.Println(pr...)
+		} else {
+			if status != 200 && status != 206 {
+				continue
+			}
+			if size == "0B" || size == "0.0B" {
+				continue
+			}
+			matchString, err := regexp.MatchString("application/[-\\w.]+", ct)
+			if err == nil && matchString {
+				log.Info(size, ct, url)
+				httpd <- config.HTTPStatus{
+					URL:         url,
+					Size:        size,
+					ContentType: ct,
 				}
 			}
-			if flag && status != 0 && len(c.url) > 1 {
-				pr := make([]interface{}, 0)
-				pr = append(pr, BrightWhite(url))
-				if status >= 200 && status < 300 {
-					pr = append(pr, BrightGreen(status).String())
-				} else if status >= 300 && status < 400 {
-					pr = append(pr, BrightYellow(status).String())
-				} else if status >= 400 && status < 500 {
-					pr = append(pr, BrightMagenta(status).String())
-				} else {
-					pr = append(pr, BrightWhite(status).String())
-				}
-				pr = append(pr, BrightCyan(size).String())
-				if ct == "" {
-					pr = append(pr, "null")
-				} else {
-					pr = append(pr, ct)
-				}
-				fmt.Println(pr...)
-			} else if flag && status != 0 {
-				pr := make([]interface{}, 0)
-				if status >= 200 && status < 300 {
-					pr = append(pr, BrightGreen(status).String())
-				} else if status >= 300 && status < 400 {
-					pr = append(pr, BrightYellow(status).String())
-				} else if status >= 400 && status < 500 {
-					pr = append(pr, BrightMagenta(status).String())
-				} else {
-					pr = append(pr, BrightWhite(status).String())
-				}
-				pr = append(pr, BrightCyan(size).String())
-				pr = append(pr, BrightWhite(url))
-				if ct == "" {
-					pr = append(pr, "null")
-				} else {
-					pr = append(pr, ct)
-				}
-				fmt.Println(pr...)
-			}
-			continue
-		}
-		if status == 200 && (size == "0B" || size == "0.0B") {
-			log.Debug(status, size, ct, url)
-		}
-		matchString, err := regexp.MatchString("application/[-\\w.]+", ct)
-		if err != nil {
-			log.Warn(err)
-			continue
-		}
-		if size != "0B" && size != "0.0B" && status == 200 && matchString {
-			log.Info(size, ct, url)
-			httpd <- url
 		}
 	}
 }
 
-func (c *core) httpdownload(wait *sync.WaitGroup, httpd chan string) {
+func (c *core) httpdownload(wait *sync.WaitGroup, httpd chan config.HTTPStatus) {
 	defer wait.Done()
 	for url := range httpd {
-		err := file_download.DownloadFile(url, c.config.Proxy)
+		err := file_download.DownloadFile(url.URL, c.config.Proxy)
 		if err != nil {
 			log.Info("file download error", err)
 			// 将URL保存到文件
@@ -247,7 +256,7 @@ func (c *core) httpdownload(wait *sync.WaitGroup, httpd chan string) {
 				log.Warn(err)
 				continue
 			}
-			_, err = file.WriteString(url + "\n")
+			_, err = file.WriteString(url.ContentType + " " + url.Size + " " + url.URL + "\n")
 			if err != nil {
 				file.Close()
 				log.Warn(err)
