@@ -1,52 +1,26 @@
 ## 简介
 
 > 最近挺喜欢听IU的blueming，所以命名为blueming
-> 主要用于获取网站备份文件
-
-## 安装
-
-```bash
-go env -w GO111MODULE=on
-
-go get github.com/bufsnake/blueming
-
-cd $GOPATH/pkg/mod/github.com/bufsnake/blueming<TAB>键后进入/cmd/blueming
-
-go build -v
-```
+> 
+> 获取网站备份文件,以及目录扫描,被动扫描
 
 ## 使用
 
 ```bash
-Usage of ./blueming:
-  -b	filter output data
-  -crt string
-    	listen cert (default "ca.crt")
-  -f string
-    	set url file
-  -i string
-    	set wordlist index(exp: test.php)
-  -key string
-    	listen key (default "ca.key")
-  -l string
-    	set log level(trace,debug,info,warn,fatal) (default "debug")
-  -listen string
-    	listen to scan dir (default "127.0.0.1:9099")
-  -p string
-    	set proxy, support http proxy(exp: http://localhost:8080)
-  -s int
-    	set timeout (default 10)
-  -t int
-    	set thread (default 100)
-  -u string
-    	set url
-  -v int
-    	log level
-  -w string
-    	set wordlist
-```
+Usage:
+  blueming [command]
 
-> ./blueming -b 可删除output下的垃圾数据(必须使用)
+Available Commands:
+  backupscan  backupscan scan
+  dirscan     dirscan scan
+  help        Help about any command
+  passive     passive scan
+
+Flags:
+  -h, --help   help for blueming
+
+Use "blueming [command] --help" for more information about a command.
+```
 
 ## TODO
 
