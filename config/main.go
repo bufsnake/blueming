@@ -9,10 +9,8 @@ type Config struct {
 	Wordlist     string
 	Index        string
 	Proxy        string
-	ResultFile   string
 	FilterOutput bool // 过滤 output 文件夹中的垃圾数据
 	Listen       string
-	URLStrs      string
 	Cert         string
 	Key          string
 }

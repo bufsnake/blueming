@@ -1,15 +1,14 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"github.com/bufsnake/blueming/config"
 	"github.com/bufsnake/blueming/internal/core"
 	"github.com/bufsnake/blueming/pkg/log"
+	"github.com/spf13/cobra"
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"io/ioutil"
 	"math"
-	"net/url"
 	"os"
 	"os/exec"
 	"runtime"
@@ -19,24 +18,7 @@ import (
 	"time"
 )
 
-func main() {
-	conf := config.Config{}
-	flag.IntVar(&conf.Thread, "t", 100, "set thread")
-	flag.IntVar(&conf.Timeout, "s", 10, "set timeout")
-	flag.StringVar(&conf.Url, "u", "", "set url")
-	flag.StringVar(&conf.Urlfile, "f", "", "set url file")
-	flag.StringVar(&conf.Loglevel, "l", log.DEBUG, "set log level(trace,debug,info,warn,fatal)")
-	flag.StringVar(&conf.Wordlist, "w", "", "set wordlist")
-	flag.StringVar(&conf.Index, "i", "", "set wordlist index(exp: test.php)")
-	flag.StringVar(&conf.Proxy, "p", "", "set proxy, support http proxy(exp: http://localhost:8080)")
-	flag.StringVar(&conf.Listen, "listen", "127.0.0.1:9099", "listen to scan dir")
-	flag.StringVar(&conf.URLStrs, "urls", "", "set url file")
-	flag.StringVar(&conf.Cert, "crt", "ca.crt", "listen cert")
-	flag.StringVar(&conf.Key, "key", "ca.key", "listen key")
-	flag.BoolVar(&conf.FilterOutput, "b", false, "filter output data")
-	// 暂不考虑
-	//flag.StringVar(&conf.ResultFile, "rf", "", "parse result file")
-	flag.Parse()
+func init() {
 	// 开启多核模式
 	runtime.GOMAXPROCS(runtime.NumCPU() * 3 / 4)
 	// 关闭 GIN Debug模式
@@ -53,43 +35,120 @@ func main() {
 		os.Exit(1)
 	}
 	_ = syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit)
-	log.SetLevel(conf.Loglevel)
-	if conf.FilterOutput {
-		// 获取 output 下的所有文件 不包含文件夹
-		allfiles, _ := ioutil.ReadDir("./output")
-		for _,f := range allfiles {
-			if !f.IsDir() {
-				if f.Size() <= 1048576 {
-					err = os.Remove("./output/" + f.Name())
-					if err != nil {
-						log.Fatal(err)
+}
+
+func main() {
+	conf := config.Config{}
+	var blueming = &cobra.Command{
+		Use: "blueming",
+		CompletionOptions: struct {
+			DisableDefaultCmd   bool
+			DisableNoDescFlag   bool
+			DisableDescriptions bool
+		}{DisableDefaultCmd: true, DisableNoDescFlag: true, DisableDescriptions: true},
+	}
+	var backupscan = &cobra.Command{
+		Use:   "backupscan",
+		Short: "backupscan scan",
+		Args:  cobra.NoArgs,
+		Run: func(cmd *cobra.Command, args []string) {
+			if (conf.Urlfile == "" && conf.Url == "") && !conf.FilterOutput {
+				cmd.Usage()
+				log.Fatal("please specify a goal")
+			}
+			if conf.FilterOutput {
+				allfiles, _ := ioutil.ReadDir("./output")
+				for _, f := range allfiles {
+					if !f.IsDir() {
+						if f.Size() <= 1048576 {
+							err := os.Remove("./output/" + f.Name())
+							if err != nil {
+								log.Fatal(err)
+							}
+						}
 					}
 				}
+				wait := sync.WaitGroup{}
+				files, _ := ioutil.ReadDir("./output")
+				fmt.Println("current exist", len(files), "files")
+				go func() {
+					for {
+						fmt.Printf("\r%.2f%%", math.Trunc(((increase/float64(len(files)))*100)*1e2)*1e-2)
+						time.Sleep(1 * time.Second / 10)
+					}
+				}()
+				for _, f := range files {
+					if !f.IsDir() {
+						wait.Add(1)
+						go filter(&wait, strings.ReplaceAll("./output/"+f.Name(), " ", ` `), float64(len(files)))
+					} else {
+						increaseAdd()
+						fmt.Printf("\r%.2f%%", math.Trunc(((increase/float64(len(files)))*100)*1e2)*1e-2)
+					}
+				}
+				wait.Wait()
+				os.Exit(1)
 			}
-		}
-
-		wait := sync.WaitGroup{}
-		files, _ := ioutil.ReadDir("./output")
-		fmt.Println("current exist", len(files), "files")
-		go func() {
-			for {
-				fmt.Printf("\r%.2f%%", math.Trunc(((increase/float64(len(files)))*100)*1e2)*1e-2)
-				time.Sleep(1 * time.Second / 10)
-			}
-		}()
-		for _, f := range files {
-			if !f.IsDir() {
-				wait.Add(1)
-				go filter(&wait, strings.ReplaceAll("./output/"+f.Name(), " ", ` `), float64(len(files)))
-			} else {
-				increaseAdd()
-				fmt.Printf("\r%.2f%%", math.Trunc(((increase/float64(len(files)))*100)*1e2)*1e-2)
-			}
-		}
-		wait.Wait()
-		// function filter { if [[ $(file $1 | grep $1": data") == "" && $(file $1 | grep "image data") == "" && $(file $1 | grep "HTML") == "" && $(file $1 | grep "empty") == "" && $(file $1 | grep "JSON") == "" && $(file $1 | grep "text") == "" ]]; then file $1; else rm -rf $1; fi } && filter logs/data.tar.gz
-		os.Exit(1)
+		},
 	}
+	backupscan.Flags().StringVarP(&conf.Url, "url", "u", "", "scan a website")
+	backupscan.Flags().StringVarP(&conf.Urlfile, "url-list", "l", "", "scan multiple websites")
+	backupscan.Flags().StringVarP(&conf.Proxy, "proxy", "p", "", "set up proxy(http://localhost:8080)")
+	backupscan.Flags().IntVarP(&conf.Thread, "thread", "t", 100, "set up thread")
+	backupscan.Flags().IntVarP(&conf.Timeout, "timeout", "s", 10, "set up timeout")
+	backupscan.Flags().StringVarP(&conf.Loglevel, "log-level", "v", log.DEBUG, "set up log level(trace,debug,info,warn,fatal)")
+	backupscan.Flags().BoolVarP(&conf.FilterOutput, "filter-output", "f", false, "empty junk data, must be used for backup scan")
+
+	var dirscan = &cobra.Command{
+		Use:   "dirscan",
+		Short: "dirscan scan",
+		Args:  cobra.NoArgs,
+		Run: func(cmd *cobra.Command, args []string) {
+			if (conf.Urlfile == "" && conf.Url == "") || conf.Wordlist == "" {
+				cmd.Usage()
+				log.Fatal("please specify target and dictionary")
+			}
+		},
+	}
+	dirscan.Flags().StringVarP(&conf.Url, "url", "u", "", "scan a website")
+	dirscan.Flags().StringVarP(&conf.Urlfile, "url-list", "l", "", "scan multiple websites")
+	dirscan.Flags().StringVarP(&conf.Proxy, "proxy", "p", "", "set up proxy(http://localhost:8080)")
+	dirscan.Flags().IntVarP(&conf.Thread, "thread", "t", 100, "set up thread")
+	dirscan.Flags().IntVarP(&conf.Timeout, "timeout", "s", 10, "set up timeout")
+	dirscan.Flags().StringVarP(&conf.Wordlist, "wordlist", "w", "", "set up wordlist")
+	dirscan.Flags().StringVarP(&conf.Index, "index", "i", "", "set the starting position of the dictionary(-i /test.php)")
+
+	var passive = &cobra.Command{
+		Use:   "passive",
+		Short: "passive scan",
+		Args:  cobra.NoArgs,
+		Run: func(cmd *cobra.Command, args []string) {
+			if conf.Urlfile == "" || conf.Wordlist == "" {
+				cmd.Usage()
+				log.Fatal("please specify target and dictionary")
+			}
+			passives := core.NewPassive(conf)
+			err := passives.Start()
+			if err != nil {
+				log.Fatal(err)
+			}
+			os.Exit(1)
+		},
+	}
+	passive.Flags().StringVarP(&conf.Urlfile, "url-list", "l", "", "scan multiple websites")
+	passive.Flags().StringVarP(&conf.Listen, "listen", "i", "127.0.0.1:8091", "set listening address")
+	passive.Flags().IntVarP(&conf.Timeout, "timeout", "s", 10, "set up timeout")
+	passive.Flags().IntVarP(&conf.Thread, "thread", "t", 100, "set up thread")
+	passive.Flags().StringVarP(&conf.Wordlist, "wordlist", "w", "", "set up wordlist")
+	passive.Flags().StringVarP(&conf.Cert, "cert", "c", "ca.crt", "set up the certificate")
+	passive.Flags().StringVarP(&conf.Key, "key", "k", "ca.key", "set up the key")
+	blueming.AddCommand(backupscan, dirscan, passive)
+	err := blueming.Execute()
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.SetLevel(conf.Loglevel)
+
 	urls := []string{}
 	if conf.Url != "" {
 		urls = append(urls, conf.Url)
@@ -105,81 +164,25 @@ func main() {
 				urls = append(urls, split[i])
 			}
 		}
-	} else if conf.ResultFile != "" {
-		file, err := ioutil.ReadFile(conf.ResultFile)
-		if err != nil {
-			log.Warn(err)
-		}
-		split := strings.Split(string(file), "\n")
-		results := make(map[string][][]string)
-		for i := 1; i < len(split); i++ {
-			split[i] = strings.Trim(split[i], "\r")
-			temp := ""
-			for color := 48; color < 56; color++ {
-				temp = strings.ReplaceAll(split[i], fmt.Sprintf("\x1b\x5b\x39%c\x6d", color), "")
-			}
-			temp = strings.ReplaceAll(temp, "\x1b\x5b\x30\x6d", "")
-			result := strings.SplitN(temp, " ", 4)
-			result2 := strings.SplitN(split[i], " ", 4)
-			if len(result) != 4 {
-				continue
-			}
-			if strings.Contains(result[2], "-1.0B") {
-				continue
-			}
-			parse, _ := url.Parse(result[0])
-			results[parse.Scheme+"-"+parse.Host] = append(results[parse.Scheme+"-"+parse.Host], []string{result2[0], result2[1], result2[2]})
-		}
-		for _, k := range results {
-			temp_results := make(map[string][][]string)
-			for i := 0; i < len(k); i++ {
-				if _, ok := temp_results[k[i][2]]; ok {
-					if len(temp_results[k[i][2]]) == 1 {
-						temp_results[k[i][2]][0] = []string{}
-					}
-					continue
-				}
-				temp_results[k[i][2]] = append(temp_results[k[i][2]], k[i])
-			}
-			for _, val := range temp_results {
-				for i := 0; i < len(val); i++ {
-					if len(val[i]) != 3 {
-						continue
-					}
-					fmt.Println(val[i][1], fmt.Sprintf("%16s", val[i][2]), val[i][0])
-				}
-			}
-		}
-		return
-	} else if conf.Listen != "" {
-		if conf.Wordlist == "" {
-			log.Fatal("If passive scanning is started, a dictionary must be specified")
-		}
-		if conf.URLStrs == "" {
-			log.Fatal("urls must be specified")
-		}
-		passive := core.NewPassive(conf)
-		err = passive.Start()
-		if err != nil {
-			log.Fatal(err)
-		}
-	} else {
-		flag.Usage()
+	}
+	if len(urls) == 0 {
 		return
 	}
+
 	// 判断 output 文件夹是否存在
 	if !exists("./output") {
 		log.Info("create output file path")
-		err := os.Mkdir("./output/", os.ModePerm)
+		err = os.Mkdir("./output/", os.ModePerm)
 		if err != nil {
 			log.Warn("create output file path error", err)
 			os.Exit(1)
 		}
 	}
+
 	// 创建 Log 文件夹
 	if !exists("./logs") {
 		log.Info("create logs file path")
-		err := os.Mkdir("./logs/", os.ModePerm)
+		err = os.Mkdir("./logs/", os.ModePerm)
 		if err != nil {
 			log.Warn("create logs file path error", err)
 			os.Exit(1)
@@ -187,6 +190,7 @@ func main() {
 	}
 
 	log.Info(len(urls), "个URL,", conf.Thread, "线程,", conf.Timeout, "超时")
+
 	config.LogFileName = "./logs/Log-" + time.Now().Format("2006-01-02 15:04:05")
 	create, err := os.Create(config.LogFileName)
 	if err != nil {
@@ -196,6 +200,7 @@ func main() {
 	if err != nil {
 		log.Warn(err)
 	}
+
 	newCore := core.NewCore(urls, conf)
 	newCore.Core()
 }

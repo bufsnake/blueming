@@ -38,7 +38,7 @@ func NewPassive(conf_ config.Config) passive {
 
 // REF: https://github.com/google/martian/blob/master/cmd/proxy/main.go
 func (c *passive) Start() error {
-	file, err := ioutil.ReadFile(c.conf.URLStrs)
+	file, err := ioutil.ReadFile(c.conf.Urlfile)
 	if err != nil {
 		return err
 	}
