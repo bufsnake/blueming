@@ -22,6 +22,29 @@ Flags:
 Use "blueming [command] --help" for more information about a command.
 ```
 
+### backupscan
+
+1. 启动扫描
+
+   ```bash
+   └> ./blueming backupscan -u http://xx.xx.xx.xx:xxx
+   [INFO] 08-27 09:04:15 cmd/blueming/main.go:192 1 个URL, 100 线程, 10 超时
+   [INFO] 08-27 09:04:15 internal/core/core.go:93 start scan backup
+   ...
+   ```
+
+2. 清洗结果(新开终端/或等待任务结束后进行清洗)
+
+   ![image-20210827090928254](.images/image-20210827090928254.png)
+
+### dirscan
+
+> 不是重点
+
+### passive
+
+> 不是重点
+
 ## TODO
 
 > 基本满足以下要求即可
