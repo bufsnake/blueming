@@ -8,7 +8,9 @@ import (
 	general_file_name "github.com/bufsnake/blueming/pkg/general-file-name"
 	http_request "github.com/bufsnake/blueming/pkg/http-request"
 	"github.com/bufsnake/blueming/pkg/log"
+	"github.com/bufsnake/blueming/pkg/parseip"
 	. "github.com/logrusorgru/aurora"
+	"github.com/weppos/publicsuffix-go/publicsuffix"
 	"io/ioutil"
 	"net/http"
 	url2 "net/url"
@@ -73,6 +75,11 @@ func (c *core) dirscan() {
 	for i := 0; i < c.config.Thread; i++ {
 		httpr.Add(1)
 		go c.httprequest(&httpr, httpc, nil, c.config.Timeout)
+	}
+	for i := 0; i < len(c.url); i++ {
+		for req, _ := range c.domain_path(c.url[i]) {
+			httpc <- strings.Trim(c.url[i],"/")+"/"+req
+		}
 	}
 	length := general_file_name.InitGeneral(c.wordlist)
 	for w := 0; w < length; w++ {
@@ -265,4 +272,61 @@ func (c *core) httpdownload(wait *sync.WaitGroup, httpd chan config.HTTPStatus) 
 			file.Close()
 		}
 	}
+}
+
+func (c *core) domain_path(urlstr string) map[string]bool {
+	domain_paths := make(map[string]bool, 0)
+	if !isDomain(urlstr) {
+		return domain_paths
+	}
+	parse, err := url2.Parse(urlstr)
+	if err != nil {
+		return domain_paths
+	}
+	if strings.Contains(parse.Host, ":") {
+		parse.Host = strings.Split(parse.Host, ":")[0]
+	}
+	domain, err := publicsuffix.Domain(parse.Host)
+	if err != nil {
+		return domain_paths
+	}
+	parse.Host = strings.ReplaceAll(parse.Host, domain, "")
+	labels := publicsuffix.Labels(parse.Host)
+	for i := 0; i < len(labels); i++ {
+		labels[i] = strings.Trim(labels[i], " \r\n\t")
+		if labels[i] == "" {
+			continue
+		}
+		domain_paths[labels[i]] = true
+		if !strings.Contains(labels[i], "-") {
+			continue
+		}
+		subword := strings.Split(labels[i], "-")
+		for j := 0; j < len(subword); j++ {
+			subword[j] = strings.Trim(subword[j], " \r\n\t")
+			if subword[j] == "" {
+				continue
+			}
+			domain_paths[subword[j]] = true
+		}
+	}
+	return domain_paths
+}
+
+func isDomain(str string) bool {
+	if matched, _ := regexp.MatchString("\\d{0,3}\\.\\d{0,3}\\.\\d{0,3}\\.\\d{0,3}", str); matched {
+		host := strings.ReplaceAll(strings.ReplaceAll(str, "http://", ""), "https://", "")
+		if strings.Contains(host, "/") {
+			host = strings.Split(host, "/")[0]
+		}
+		if strings.Contains(host, ":") {
+			host = strings.Split(host, ":")[0]
+		}
+		_, _, err := parseip.ParseIP(host)
+		if err != nil {
+			return true
+		}
+		return false
+	}
+	return true
 }

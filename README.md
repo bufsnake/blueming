@@ -50,6 +50,9 @@ Use "blueming [command] --help" for more information about a command.
 > 基本满足以下要求即可
 
 - [ ] 常见文件泄露扫描 .git .hg .idea .DS_Store ...
+- [x] 提取域名关键字进行目录扫描
+- [ ] 日志文件扫描: 指定扫描地址，计算头一天的日期，根据日期生成字典，可定制日期出现的位置
+  "image$TIME$" "pay.$time$"
 - [x] 开启被动扫描模式，配合httpx自动进行目录扫描(二级、三级、四级...)
 - [x] 通过URL自动生成文件名
 - [x] 根据后缀名将URL定义为对应的文件格式，如zip、tar.gz等
