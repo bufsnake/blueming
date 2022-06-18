@@ -41,11 +41,12 @@ func main() {
 	conf := config.Config{}
 	var blueming = &cobra.Command{
 		Use: "blueming",
-		CompletionOptions: struct {
-			DisableDefaultCmd   bool
-			DisableNoDescFlag   bool
-			DisableDescriptions bool
-		}{DisableDefaultCmd: true, DisableNoDescFlag: true, DisableDescriptions: true},
+	}
+	blueming.CompletionOptions = cobra.CompletionOptions{
+		DisableDefaultCmd:   true,
+		DisableNoDescFlag:   true,
+		DisableDescriptions: true,
+		HiddenDefaultCmd:    true,
 	}
 	var backupscan = &cobra.Command{
 		Use:   "backupscan",
@@ -98,7 +99,7 @@ func main() {
 	backupscan.Flags().IntVarP(&conf.Timeout, "timeout", "s", 10, "set up timeout")
 	backupscan.Flags().StringVarP(&conf.Loglevel, "log-level", "v", log.DEBUG, "set up log level(trace,debug,info,warn,fatal)")
 	backupscan.Flags().BoolVarP(&conf.FilterOutput, "filter-output", "f", false, "empty junk data, must be used for backup scan")
-
+	
 	var dirscan = &cobra.Command{
 		Use:   "dirscan",
 		Short: "dirscan scan",
@@ -117,7 +118,7 @@ func main() {
 	dirscan.Flags().IntVarP(&conf.Timeout, "timeout", "s", 10, "set up timeout")
 	dirscan.Flags().StringVarP(&conf.Wordlist, "wordlist", "w", "", "set up wordlist")
 	dirscan.Flags().StringVarP(&conf.Index, "index", "i", "", "set the starting position of the dictionary(-i /test.php)")
-
+	
 	var passive = &cobra.Command{
 		Use:   "passive",
 		Short: "passive scan",
@@ -148,7 +149,7 @@ func main() {
 		log.Fatal(err)
 	}
 	log.SetLevel(conf.Loglevel)
-
+	
 	urls := []string{}
 	if conf.Url != "" {
 		urls = append(urls, conf.Url)
@@ -168,7 +169,7 @@ func main() {
 	if len(urls) == 0 {
 		return
 	}
-
+	
 	// 判断 output 文件夹是否存在
 	if !exists("./output") {
 		log.Info("create output file path")
@@ -178,7 +179,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-
+	
 	// 创建 Log 文件夹
 	if !exists("./logs") {
 		log.Info("create logs file path")
@@ -188,9 +189,9 @@ func main() {
 			os.Exit(1)
 		}
 	}
-
+	
 	log.Info(len(urls), "个URL,", conf.Thread, "线程,", conf.Timeout, "超时")
-
+	
 	config.LogFileName = "./logs/Log-" + time.Now().Format("2006-01-02 15:04:05")
 	create, err := os.Create(config.LogFileName)
 	if err != nil {
@@ -200,7 +201,7 @@ func main() {
 	if err != nil {
 		log.Warn(err)
 	}
-
+	
 	newCore := core.NewCore(urls, conf)
 	newCore.Core()
 }

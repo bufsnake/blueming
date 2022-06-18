@@ -3,93 +3,78 @@ package http_request
 import (
 	"crypto/tls"
 	"fmt"
-	"github.com/bufsnake/blueming/config"
-	"github.com/bufsnake/blueming/pkg/log"
 	"github.com/bufsnake/blueming/pkg/useragent"
+	"io"
 	"io/ioutil"
+	"mime"
 	"net/http"
-	url2 "net/url"
-	"os"
+	"net/url"
 	"time"
 )
 
-func HTTPRequest(method, url, proxyx string, timeout int) (status int, contenttype, size string, body string, err error) {
-	client := &http.Client{
-		Timeout:   time.Duration(timeout) * time.Second,
-		Transport: nil,
+func HTTPRequest(urlstr, proxyx string, timeout int) (status int, contenttype, size string, body string, err error) {
+	cli := &http.Client{
+		Timeout: time.Duration(timeout) * time.Second,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 	}
-	transport := &http.Transport{
+	transport := http.Transport{
 		DisableKeepAlives: true,
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: true,
 		},
 	}
 	if proxyx != "" {
-		proxy, err := url2.Parse(proxyx)
-		if err != nil {
-			return 0, "", "", "", err
+		transport.Proxy = func(request *http.Request) (*url.URL, error) {
+			return url.Parse(proxyx)
 		}
-		transport.Proxy = http.ProxyURL(proxy)
-		client.Transport = transport
-	} else {
-		client.Transport = transport
 	}
-	req, err := http.NewRequest(method, url, nil)
+	cli.Transport = &transport
+	req, err := http.NewRequest(http.MethodGet, urlstr, nil)
 	if err != nil {
 		return 0, "", "0B", "", err
 	}
-	if method == http.MethodGet {
-		req.Header.Add("Range", "bytes=0-8100")
-	}
 	req.Header.Add("Accept", "*/*")
-	req.Header.Add("Referer", "http://www.baidu.com")
+	req.Header.Add("Referer", "https://www.baidu.com/")
 	req.Header.Add("Connection", "close")
 	req.Header.Add("Cache-Control", "no-cache")
 	req.Header.Add("User-Agent", useragent.RandomUserAgent())
-	do, err := client.Do(req)
+	res, err := cli.Do(req)
 	if err != nil {
 		return 0, "", "0B", "", err
 	}
-	defer do.Body.Close()
-	all, err := ioutil.ReadAll(do.Body)
-	flag := false
-	if err != nil {
-		flag = true
+	defer res.Body.Close()
+	if res.StatusCode == 101 {
+		return 0, "", "0B", "", err
 	}
-	temp := float64(do.ContentLength)
+	resbody := make([]byte, 0)
+	resbody, err = ioutil.ReadAll(io.LimitReader(res.Body, 1024*1024*2))
+	if err != nil {
+		return 0, "", "0B", "", err
+	}
+	content_length := float64(res.ContentLength)
+	if content_length < 1 {
+		content_length = float64(len(resbody))
+	}
 	SIZE := []string{"B", "K", "M", "G", "T"}
 	i := 0
 	for {
-		if temp < 1024 {
+		if content_length < 1024 {
 			break
 		}
-		temp = temp / 1024.0
+		content_length = content_length / 1024.0
 		i++
 	}
 	length := ""
 	if i > len(SIZE) {
-		length = fmt.Sprintf("%0.1fX", temp)
+		length = fmt.Sprintf("%0.1fX", content_length)
 	} else {
-		length = fmt.Sprintf("%0.1f%s", temp, SIZE[i])
+		length = fmt.Sprintf("%0.1f%s", content_length, SIZE[i])
 	}
-	if do.ContentLength > 104857600 {
-		file, err := os.OpenFile(config.LogFileName, os.O_WRONLY|os.O_APPEND, 0644)
-		if err != nil {
-			log.Warn(err)
-		}
-		_, err = file.WriteString(do.Header.Get("Content-Type") + " " + length + " " + url + "\n")
-		if err != nil {
-			file.Close()
-			log.Warn(err)
-		}
-		file.Close()
-		return 0, "", "0B", "", err
+	contenttype, _, err = mime.ParseMediaType(res.Header.Get("Content-Type"))
+	if err != nil {
+		contenttype = res.Header.Get("Content-Type")
 	}
-	if flag { // GET 获取 body 失败时
-		return do.StatusCode, do.Header.Get("Content-Type"), length, "", nil
-	}
-	return do.StatusCode, do.Header.Get("Content-Type"), length, string(all), nil
+	return res.StatusCode, contenttype, length, string(resbody), nil
 }
