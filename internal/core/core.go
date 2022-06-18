@@ -12,7 +12,6 @@ import (
 	. "github.com/logrusorgru/aurora"
 	"github.com/weppos/publicsuffix-go/publicsuffix"
 	"io/ioutil"
-	"net/http"
 	url2 "net/url"
 	"os"
 	"regexp"
@@ -78,7 +77,7 @@ func (c *core) dirscan() {
 	}
 	for i := 0; i < len(c.url); i++ {
 		for req, _ := range c.domain_path(c.url[i]) {
-			httpc <- strings.Trim(c.url[i],"/")+"/"+req
+			httpc <- strings.Trim(c.url[i], "/") + "/" + req
 		}
 	}
 	length := general_file_name.InitGeneral(c.wordlist)
@@ -165,18 +164,12 @@ func (c *core) httprequest(wait *sync.WaitGroup, httpc chan string, httpd chan c
 			body   string
 			err    error
 		)
-		if c.config.Wordlist == "" { // 备份文件扫描
-			status, ct, size, body, err = http_request.HTTPRequest(http.MethodHead, url, c.config.Proxy, timeout)
-		} else { // 目录扫描
-			status, ct, size, body, err = http_request.HTTPRequest(http.MethodGet, url, c.config.Proxy, timeout)
+		status, ct, size, body, err = http_request.HTTPRequest(url, c.config.Proxy, timeout)
+		if err != nil {
+			log.Warn(err)
+			continue
 		}
 		log.Trace(status, ct, size, body, err, url)
-		if err != nil && c.config.Wordlist == "" {
-			log.Warn(err)
-		}
-		if err != nil && strings.Contains(err.Error(), "proxyconnect tcp") {
-			log.Warn(err)
-		}
 		if c.config.Wordlist != "" {
 			if status == 404 || status == 0 {
 				continue
@@ -231,21 +224,22 @@ func (c *core) httprequest(wait *sync.WaitGroup, httpc chan string, httpd chan c
 				pr = append(pr, "["+ct+"]")
 			}
 			fmt.Println(pr...)
-		} else {
-			if status != 200 && status != 206 {
-				continue
-			}
-			if size == "0B" || size == "0.0B" {
-				continue
-			}
-			matchString, err := regexp.MatchString("application/[-\\w.]+", ct)
-			if err == nil && matchString {
-				log.Info(size, ct, url)
-				httpd <- config.HTTPStatus{
-					URL:         url,
-					Size:        size,
-					ContentType: ct,
-				}
+			continue
+		}
+		if status != 200 && status != 206 {
+			continue
+		}
+		if size == "0B" || size == "0.0B" {
+			continue
+		}
+		var match bool
+		match, err = regexp.MatchString("application/[-\\w.]+", ct)
+		if err == nil && match {
+			log.Info(size, ct, url)
+			httpd <- config.HTTPStatus{
+				URL:         url,
+				Size:        size,
+				ContentType: ct,
 			}
 		}
 	}
