@@ -18,8 +18,8 @@ require (
 	github.com/spf13/viper v1.8.1 // indirect
 	github.com/stretchr/testify v1.7.2 // indirect
 	github.com/weppos/publicsuffix-go v0.15.0
-	golang.org/x/net v0.0.0-20220617184016-355a448f1bc9 // indirect
-	golang.org/x/text v0.3.7
+	golang.org/x/net v0.7.0 // indirect
+	golang.org/x/text v0.7.0
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
